@@ -30,4 +30,7 @@ var defaultVersionedFeatureGates = map[featuregate.Feature]featuregate.Versioned
 	InPlaceOrRecreate: {
 		{Version: version.MustParse("1.4"), Default: false, PreRelease: featuregate.Alpha},
 	},
+	InPlaceOrRecreateAsAutoPreferred: {
+		{Version: version.MustParse("1.4"), Default: false, PreRelease: featuregate.Alpha},
+	},
 }

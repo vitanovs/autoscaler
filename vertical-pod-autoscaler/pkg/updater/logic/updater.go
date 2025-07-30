@@ -244,7 +244,15 @@ func (u *updater) RunOnce(ctx context.Context) {
 		podsForEviction := make([]*apiv1.Pod, 0)
 		updateMode := vpa_api_util.GetUpdateMode(vpa)
 
-		if updateMode == vpa_types.UpdateModeInPlaceOrRecreate && features.Enabled(features.InPlaceOrRecreate) {
+		isInPlaceOrRecreateEnabled := features.Enabled(features.InPlaceOrRecreate)
+		isInPlaceOrRecreateAsAutoPreferredEnabled := features.Enabled(features.InPlaceOrRecreateAsAutoPreferred)
+
+		if updateMode == vpa_types.UpdateModeAuto && isInPlaceOrRecreateAsAutoPreferredEnabled {
+			isInPlaceOrRecreateEnabled = true
+			updateMode = vpa_types.UpdateModeInPlaceOrRecreate
+		}
+
+		if updateMode == vpa_types.UpdateModeInPlaceOrRecreate && isInPlaceOrRecreateEnabled {
 			podsForInPlace = u.getPodsUpdateOrder(filterNonInPlaceUpdatablePods(livePods, inPlaceLimiter), vpa)
 			inPlaceUpdatablePodsCounter.Add(vpaSize, len(podsForInPlace))
 		} else {

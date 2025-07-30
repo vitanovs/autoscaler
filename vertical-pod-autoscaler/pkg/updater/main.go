@@ -103,6 +103,11 @@ func main() {
 		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 	}
 
+	if !features.Enabled(features.InPlaceOrRecreate) && features.Enabled(features.InPlaceOrRecreateAsAutoPreferred) {
+		klog.ErrorS(nil, "InPlaceOrRecreateAsAutoPreferred requires InPlaceOrRecreate feature gate to be enabled")
+		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
+	}
+
 	healthCheck := metrics.NewHealthCheck(*updaterInterval * 5)
 	server.Initialize(&commonFlags.EnableProfiling, healthCheck, address)
 

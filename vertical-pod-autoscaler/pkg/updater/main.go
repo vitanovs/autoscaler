@@ -39,6 +39,7 @@ import (
 	"k8s.io/autoscaler/vertical-pod-autoscaler/common"
 	"k8s.io/autoscaler/vertical-pod-autoscaler/pkg/admission-controller/resource/pod/patch"
 	"k8s.io/autoscaler/vertical-pod-autoscaler/pkg/admission-controller/resource/pod/recommendation"
+	vpa_types "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/apis/autoscaling.k8s.io/v1"
 	vpa_clientset "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/client/clientset/versioned"
 	"k8s.io/autoscaler/vertical-pod-autoscaler/pkg/features"
 	"k8s.io/autoscaler/vertical-pod-autoscaler/pkg/target"
@@ -46,12 +47,14 @@ import (
 	"k8s.io/autoscaler/vertical-pod-autoscaler/pkg/updater/inplace"
 	updater "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/updater/logic"
 	"k8s.io/autoscaler/vertical-pod-autoscaler/pkg/updater/priority"
+	vpa_flags "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/utils/flag"
 	"k8s.io/autoscaler/vertical-pod-autoscaler/pkg/utils/limitrange"
 	"k8s.io/autoscaler/vertical-pod-autoscaler/pkg/utils/metrics"
 	metrics_updater "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/utils/metrics/updater"
 	"k8s.io/autoscaler/vertical-pod-autoscaler/pkg/utils/server"
 	"k8s.io/autoscaler/vertical-pod-autoscaler/pkg/utils/status"
 	vpa_api_util "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/utils/vpa"
+	"k8s.io/utils/set"
 )
 
 var (
@@ -76,6 +79,14 @@ var (
 		"If true, updater will only evict pods when admission controller status is valid.")
 
 	namespace = os.Getenv("NAMESPACE")
+
+	autoPreferredChoices = set.New(
+		string(vpa_types.UpdateModeOff),
+		string(vpa_types.UpdateModeInitial),
+		string(vpa_types.UpdateModeRecreate),
+		string(vpa_types.UpdateModeInPlaceOrRecreate),
+	)
+	autoPreferred = vpa_flags.NewChoiceFlagVar(autoPreferredChoices)
 )
 
 const (
@@ -84,6 +95,11 @@ const (
 	scaleCacheEntryFreshnessTime time.Duration = 10 * time.Minute
 	scaleCacheEntryJitterFactor  float64       = 1.
 )
+
+func init() {
+	autoPreferredChoicesStr := strings.Join(autoPreferredChoices.UnsortedList(), ", ")
+	flag.Var(&autoPreferred, "auto-preferred", fmt.Sprintf("Preferred strategy for Auto update mode. Supported choices: %s", autoPreferredChoicesStr))
+}
 
 func main() {
 	commonFlags := common.InitCommonFlags()
@@ -100,6 +116,11 @@ func main() {
 
 	if len(commonFlags.VpaObjectNamespace) > 0 && len(commonFlags.IgnoredVpaObjectNamespaces) > 0 {
 		klog.ErrorS(nil, "--vpa-object-namespace and --ignored-vpa-object-namespaces are mutually exclusive and can't be set together.")
+		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
+	}
+
+	if !features.Enabled(features.InPlaceOrRecreate) && vpa_types.UpdateMode(autoPreferred.String()) == vpa_types.UpdateModeInPlaceOrRecreate {
+		klog.ErrorS(nil, "--auto-preferred=InPlaceOrRecreate requires InPlaceOrRecreate feature gate to be enabled")
 		klog.FlushAndExit(klog.ExitFlushTimeout, 1)
 	}
 
@@ -226,6 +247,7 @@ func run(healthCheck *metrics.HealthCheck, commonFlag *common.CommonFlags) {
 		commonFlag.VpaObjectNamespace,
 		ignoredNamespaces,
 		calculators,
+		vpa_types.UpdateMode(autoPreferred.String()),
 	)
 	if err != nil {
 		klog.ErrorS(err, "Failed to create updater")

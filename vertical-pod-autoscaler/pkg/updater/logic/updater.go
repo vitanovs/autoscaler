@@ -72,6 +72,7 @@ type updater struct {
 	statusValidator              status.Validator
 	controllerFetcher            controllerfetcher.ControllerFetcher
 	ignoredNamespaces            []string
+	autoPreferred                vpa_types.UpdateMode
 }
 
 // NewUpdater creates Updater with given configuration
@@ -92,6 +93,7 @@ func NewUpdater(
 	namespace string,
 	ignoredNamespaces []string,
 	patchCalculators []patch.Calculator,
+	autoPreferred vpa_types.UpdateMode,
 ) (Updater, error) {
 	evictionRateLimiter := getRateLimiter(evictionRateLimit, evictionRateBurst)
 	// TODO: Create in-place rate limits for the in-place rate limiter
@@ -125,6 +127,7 @@ func NewUpdater(
 			statusNamespace,
 		),
 		ignoredNamespaces: ignoredNamespaces,
+		autoPreferred:     autoPreferred,
 	}, nil
 }
 
@@ -243,6 +246,10 @@ func (u *updater) RunOnce(ctx context.Context) {
 		podsForInPlace := make([]*apiv1.Pod, 0)
 		podsForEviction := make([]*apiv1.Pod, 0)
 		updateMode := vpa_api_util.GetUpdateMode(vpa)
+
+		if updateMode == vpa_types.UpdateModeAuto && u.autoPreferred != "" {
+			updateMode = u.autoPreferred
+		}
 
 		if updateMode == vpa_types.UpdateModeInPlaceOrRecreate && features.Enabled(features.InPlaceOrRecreate) {
 			podsForInPlace = u.getPodsUpdateOrder(filterNonInPlaceUpdatablePods(livePods, inPlaceLimiter), vpa)
